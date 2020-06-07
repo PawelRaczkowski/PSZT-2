@@ -56,6 +56,7 @@ def divideonevsonemodel(labelsTraining):  # do taktyki one vs one - tworzy list�
 
 def trainModel(function_weights, alpha, imagesTraining, param): # zwraca wytrenowane wagi
     counter=0
+    b=0
     while counter<=2:
         for i in range(len(imagesTraining)):
             realValue = param[i]
@@ -68,27 +69,30 @@ def trainModel(function_weights, alpha, imagesTraining, param): # zwraca wytreno
                 result = [function_weights[j] - 2 * alpha * (1 / (100000)) * function_weights[j] for j in
                           range(len(function_weights))]
                 function_weights = result
+
             else:
                 # print('Bad classification')
                 result = [function_weights[j] + alpha * (
                         realValue * (imagesTraining[i][j]) - 2 * (1 / (100000)) * function_weights[j]) for j
                           in range(len(imagesTraining[i]))]
                 function_weights = result
+                b+=1-y*realValue
         counter+=1
     print('Calculated weights ', function_weights)
-    return function_weights
+    bias=b/(counter*len(imagesTraining))
+    return function_weights,bias
 
 
-def predict(feature_vector, weights):
-    y = np.dot(feature_vector, weights)
+def predict(feature_vector, weights,bias):
+    y = np.dot(feature_vector, weights)+bias
     if y > 1:
         return 1
     else:
         return -1
 
 
-def validate_model(feature, weights): # walidacja - im punkt dalej od granicy to tym lepszy
-    return np.dot(feature, weights) / (np.linalg.norm(weights))
+def validate_model(feature, weights,bias): # walidacja - im punkt dalej od granicy to tym lepszy
+    return (np.dot(feature, weights)+bias) / (np.linalg.norm(weights))
 
 
 ### CZYTANIE DANYCH ###
@@ -104,36 +108,37 @@ for i in range(len(imagesTraining)):  # normalizacja DO WARTOŚCI (0,1)
 # TAKTYKA ONE VS ALL
 #tworzymy N modeli gdzie N to jest długość zbioru klas czyli w naszym przypadku =10
 # 1 model będzie traktował 0 z labelem 1 a resztę z labelem 0; 2 model będzie traktował 1 z labelem 1 a resztę z 0 itd.
-nModels = divideIntoModels(labelsTraining)  # nmodels[0] to tam gdzie 0 są oznaczone jako 1 a reszta jako 0
-
+# nModels = divideIntoModels(labelsTraining)  # nmodels[0] to tam gdzie 0 są oznaczone jako 1 a reszta jako 0
+#
 weights = np.zeros((rows * columns, 1))  # inicjalizacja wag
 weights_proper = []
-for i in range(len(
-        weights)):  # zapisywalo jako lista list jednoelementowych więc zrobiłem taką konwersję na normalne wartości XD
+for i in range(len(weights)):  # zapisywalo jako lista list jednoelementowych więc zrobiłem taką konwersję na normalne wartości XD
     weights_proper.append(weights[i][0])
-
-alpha = 0.001  # pilnuje kroku z jakim zmieniamy wagi w trenowaniu
-trained_weights = []
-
+#
+# alpha = 0.001  # pilnuje kroku z jakim zmieniamy wagi w trenowaniu
+# trained_weights = []
+# trained_biases=[]
 # for i in range(len(nModels)): # trenowanie modeli
-#     trained_weights.append(trainModel(weights_proper, alpha, imagesTraining, nModels[i]))
-#     print('Trained model nr: ', i + 1)
-
-# testowanie modeli i dokonywanie predykcji
+#      weights,bias=trainModel(weights_proper, alpha, imagesTraining, nModels[i])
+#      trained_weights.append(weights)
+#      trained_biases.append(bias)
+#      print('Trained model nr: ', i + 1)
+#
+# # testowanie modeli i dokonywanie predykcji
 imagesPrediction, r, c = readTrainingData('samples/t10k-images.idx3-ubyte')
 labelsPrediction = readTrainingLabels('samples/t10k-labels.idx1-ubyte')
-
-for i in range(len(imagesPrediction)):  # normalizacja
-    imagesPrediction[i] = imagesPrediction[i] / float(255)
-
-accuracy = 0
+#
+# for i in range(len(imagesPrediction)):  # normalizacja
+#     imagesPrediction[i] = imagesPrediction[i] / float(255)
+#
+# accuracy = 0
 probes = len(imagesPrediction)
-correct = 0
-validations = []  # ocena prawdopodobieństwa słuszności każdego modelu
+# correct = 0
+# validations = []  # ocena prawdopodobieństwa słuszności każdego modelu
 # for j in range(probes): # predykcja dla modelu one vs all
 #     for i in range(len(trained_weights)):
-#         predict(imagesPrediction[j], trained_weights[i])
-#         validations.append(validate_model(imagesPrediction[j], trained_weights[i]))
+#         predict(imagesPrediction[j], trained_weights[i],trained_biases[i])
+#         validations.append(validate_model(imagesPrediction[j], trained_weights[i],trained_biases[i]))
 #
 #     index = validations.index(max(validations))
 #     print('Predicted by model: ', index)
@@ -147,7 +152,7 @@ validations = []  # ocena prawdopodobieństwa słuszności każdego modelu
 
 ################################################################################################################################################
 
-# TAKTYKA ONE VS ONE
+#TAKTYKA ONE VS ONE
 groupedLabels = divideonevsonemodel(labelsTraining)
 
 
@@ -178,15 +183,18 @@ def sigmoid(x):
 
 
 onevsoneweights = [[[] for j in range(10)] for i in range(10)] # lista list list XD ->
+onevsonebiases = [[[] for j in range(10)] for i in range(10)]
 counter_models = 1
 alpha = 0.001
 for i in range(10):
     for j in range(i + 1, 10):
         dividedImages, convertedLabels = getImages(i, j, groupedLabels, imagesTraining)
-        trained_weight = trainModel(weights_proper, alpha, dividedImages, convertedLabels)
+        trained_weight,trained_bias = trainModel(weights_proper, alpha, dividedImages, convertedLabels)
         onevsoneweights[i][j].append(trained_weight)  # tutaj przykład: i=0 j=1-> w [i][j] trzymamy wagi wytrenowane do
+        onevsonebiases[i][j].append(trained_bias)
         #modelu wyróżniającego 0 od 1
         onevsoneweights[j][i].append(trained_weight)
+        onevsonebiases[j][i].append(trained_bias)
         print('Trained model nr ', counter_models)
         counter_models += 1
     # print(onevsoneweights)
@@ -199,8 +207,8 @@ new_counter = 0
 for k in range(probes):
     for i in range(10):
         for j in range(i + 1, 10):
-            prediction = predict(imagesPrediction[k], onevsoneweights[i][j][0])
-            change = sigmoid(validate_model(imagesPrediction[k], onevsoneweights[i][j][0]))
+            prediction = predict(imagesPrediction[k], onevsoneweights[i][j][0],onevsonebiases[i][j][0])
+            change = sigmoid(validate_model(imagesPrediction[k], onevsoneweights[i][j][0],onevsonebiases[i][j][0]))
             if prediction == 1:
                 new_validations[i] += 10+change
 
